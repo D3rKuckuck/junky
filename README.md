@@ -4,6 +4,8 @@ For working with harware
 ```
 sudo usermod -a -G rdma,docker,video $USER
 ```
+## Structure of server package
+```
 junky_server/
 ├── package.xml
 ├── setup.py
@@ -28,3 +30,4 @@ junky_server/
 │       ├── control_phone.html
 │       └── sensors.html
 └── test/
+```
