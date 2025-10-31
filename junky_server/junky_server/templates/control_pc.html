@@ -31,12 +31,27 @@
                         
                         <div class="mb-3">
                             <label class="form-label">Скорость: <span id="speedValue">0</span></label>
-                            <div class="progress">
+                            <div class="progress mb-2">
                                 <div id="speedBar" class="progress-bar" style="width: 0%"></div>
                             </div>
-                            <div class="mt-2">
-                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-change="-1">↓</button>
-                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-change="1">↑</button>
+                            <div class="speed-controls">
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="0">0%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="32">12.5%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="64">25%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="96">37.5%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="128">50%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="160">62.5%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="192">75%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="224">87.5%</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-speed="255">100%</button>
+                            </div>
+                        </div>
+                        
+                        <div class="current-state mb-3">
+                            <h6>Текущее состояние:</h6>
+                            <div class="small">
+                                <div>Направление: <span id="directionState">-</span></div>
+                                <div>Скорость: <span id="currentSpeedState">0</span></div>
                             </div>
                         </div>
                         
@@ -66,27 +81,64 @@
     background-color: #007bff;
     color: white;
 }
+
+.speed-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+}
+
+.speed-btn.active {
+    background-color: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.current-state {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #dee2e6;
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const speedLevels = [0, 32, 64, 96, 128, 160, 192, 224, 255];
-    let currentSpeedIndex = 0;
+    let currentSpeed = 0;
+    let activeKeys = new Set();
     
-    // Обработка кнопок управления
+    // Обработка кнопок управления направлением
     document.querySelectorAll('.control-btn').forEach(btn => {
-        btn.addEventListener('mousedown', () => handleKey(btn.dataset.key, 1));
-        btn.addEventListener('mouseup', () => handleKey(btn.dataset.key, 0));
-        btn.addEventListener('mouseleave', () => handleKey(btn.dataset.key, 0));
+        btn.addEventListener('mousedown', () => {
+            const key = btn.dataset.key;
+            activeKeys.add(key);
+            handleKey(key, 1);
+            updateDirectionState();
+        });
+        
+        btn.addEventListener('mouseup', () => {
+            const key = btn.dataset.key;
+            activeKeys.delete(key);
+            handleKey(key, 0);
+            updateDirectionState();
+        });
+        
+        btn.addEventListener('mouseleave', () => {
+            const key = btn.dataset.key;
+            if (activeKeys.has(key)) {
+                activeKeys.delete(key);
+                handleKey(key, 0);
+                updateDirectionState();
+            }
+        });
     });
     
-    // Обработка изменения скорости
+    // Обработка кнопок скорости
     document.querySelectorAll('.speed-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const change = parseInt(btn.dataset.change);
-            currentSpeedIndex = Math.max(0, Math.min(speedLevels.length - 1, currentSpeedIndex + change));
-            updateSpeedDisplay();
-            sendSpeed(speedLevels[currentSpeedIndex]);
+            const speed = parseInt(btn.dataset.speed);
+            setSpeed(speed);
         });
     });
     
@@ -94,8 +146,31 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('releaseControl').addEventListener('click', releaseControl);
     
     // Обработка клавиатуры
-    document.addEventListener('keydown', (e) => handleKeyboard(e, 1));
-    document.addEventListener('keyup', (e) => handleKeyboard(e, 0));
+    document.addEventListener('keydown', (e) => {
+        const keyMap = {
+            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd'
+        };
+        
+        if (keyMap[e.code] && !activeKeys.has(keyMap[e.code])) {
+            e.preventDefault();
+            activeKeys.add(keyMap[e.code]);
+            handleKey(keyMap[e.code], 1);
+            updateDirectionState();
+        }
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        const keyMap = {
+            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd'
+        };
+        
+        if (keyMap[e.code]) {
+            e.preventDefault();
+            activeKeys.delete(keyMap[e.code]);
+            handleKey(keyMap[e.code], 0);
+            updateDirectionState();
+        }
+    });
     
     function handleKey(key, state) {
         fetch('/api/keypress', {
@@ -111,27 +186,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    function handleKeyboard(e, state) {
-        const keyMap = {
-            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd',
-            'ArrowUp': 'up', 'ArrowDown': 'down'
-        };
+    function setSpeed(speed) {
+        currentSpeed = speed;
+        updateSpeedDisplay();
         
-        if (keyMap[e.code]) {
-            e.preventDefault();
-            handleKey(keyMap[e.code], state);
-            
-            // Изменение скорости
-            if (e.code === 'ArrowUp' && state === 1) {
-                currentSpeedIndex = Math.min(speedLevels.length - 1, currentSpeedIndex + 1);
-                updateSpeedDisplay();
-                sendSpeed(speedLevels[currentSpeedIndex]);
-            } else if (e.code === 'ArrowDown' && state === 1) {
-                currentSpeedIndex = Math.max(0, currentSpeedIndex - 1);
-                updateSpeedDisplay();
-                sendSpeed(speedLevels[currentSpeedIndex]);
-            }
+        // Снимаем выделение со всех кнопок скорости
+        document.querySelectorAll('.speed-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Выделяем активную кнопку скорости
+        const activeSpeedBtn = document.querySelector(`[data-speed="${speed}"]`);
+        if (activeSpeedBtn) {
+            activeSpeedBtn.classList.add('active');
         }
+        
+        // Отправляем скорость на сервер
+        sendSpeed(speed);
     }
     
     function sendSpeed(speed) {
@@ -145,19 +216,46 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateSpeedDisplay() {
         const speedValue = document.getElementById('speedValue');
         const speedBar = document.getElementById('speedBar');
-        const percentage = (currentSpeedIndex / (speedLevels.length - 1)) * 100;
+        const currentSpeedState = document.getElementById('currentSpeedState');
         
-        speedValue.textContent = speedLevels[currentSpeedIndex];
+        // Процент для прогресс-бара (0-255 -> 0-100%)
+        const percentage = (currentSpeed / 255) * 100;
+        
+        speedValue.textContent = currentSpeed;
+        currentSpeedState.textContent = currentSpeed;
         speedBar.style.width = `${percentage}%`;
     }
     
+    function updateDirectionState() {
+        const directionState = document.getElementById('directionState');
+        let direction = '-';
+        
+        if (activeKeys.size > 0) {
+            const directions = [];
+            if (activeKeys.has('w')) directions.push('Вперед');
+            if (activeKeys.has('s')) directions.push('Назад');
+            if (activeKeys.has('a')) directions.push('Влево');
+            if (activeKeys.has('d')) directions.push('Вправо');
+            direction = directions.join(' + ');
+        }
+        
+        directionState.textContent = direction;
+    }
+    
     function releaseControl() {
+        // Отпускаем все активные клавиши
+        activeKeys.forEach(key => {
+            handleKey(key, 0);
+        });
+        activeKeys.clear();
+        updateDirectionState();
+        
         fetch('/api/release_control', {method: 'POST'})
             .then(() => window.location.href = '/');
     }
     
-    // Инициализация отображения скорости
-    updateSpeedDisplay();
+    // Инициализация - устанавливаем скорость 0
+    setSpeed(0);
 });
 </script>
 {% endblock %}

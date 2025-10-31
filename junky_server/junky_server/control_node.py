@@ -9,10 +9,9 @@ class ControlNode(Node):
         
         # Переменные для хранения состояния
         self.key_states = {
-            'w': 0, 'a': 0, 's': 0, 'd': 0,
-            'up': 0, 'down': 0
+            'w': 0, 'a': 0, 's': 0, 'd': 0
         }
-        self.speed_level = 0
+        self.speed_level = 0  # Текущий уровень скорости (0-255)
         self.joystick_left_y = 0
         self.joystick_right_x = 0
         self.control_mode = -1  # -1: нет управления, 0: ПК, 1: телефон
@@ -58,6 +57,7 @@ class ControlNode(Node):
         # Здесь будет логика преобразования команд в управление моторами
         if self.control_mode == 0:  # Управление с ПК
             # Обработка клавиатурного управления
+            # speed_level уже содержит установленную скорость (0-255)
             pass
         elif self.control_mode == 1:  # Управление с телефона
             # Обработка джойстиков
