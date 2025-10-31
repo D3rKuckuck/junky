@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1>Сенсоры и интерфейсы</h1>
+        
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Видео с камеры</h5>
+                        <div class="mb-3">
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomIn()">+</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomOut()">-</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="resetZoom()">Сброс</button>
+                        </div>
+                        <img id="cameraFeed" src="{{ url_for('video_feed') }}" class="img-fluid zoomable" alt="Camera Feed" style="transform-origin: center; transform: scale(1);">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Информация о камере</h5>
+                        <div id="cameraInfo">
+                            <p>Статус: <span id="cameraStatus">Загрузка...</span></p>
+                            <p>FPS: <span id="cameraFPS">-</span></p>
+                            <p>Разрешение: <span id="cameraResolution">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentZoom = 1;
+
+function zoomIn() {
+    currentZoom = Math.min(3, currentZoom + 0.1);
+    document.getElementById('cameraFeed').style.transform = `scale(${currentZoom})`;
+}
+
+function zoomOut() {
+    currentZoom = Math.max(0.5, currentZoom - 0.1);
+    document.getElementById('cameraFeed').style.transform = `scale(${currentZoom})`;
+}
+
+function resetZoom() {
+    currentZoom = 1;
+    document.getElementById('cameraFeed').style.transform = 'scale(1)';
+}
+
+// Обновление статуса камеры
+function updateCameraStatus() {
+    fetch('/api/camera_status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('cameraStatus').textContent = data.status;
+            // Парсинг информации из статуса
+            const status = data.status;
+            if (status.includes('Активна')) {
+                const fpsMatch = status.match(/FPS: (\d+\.\d+)/);
+                const resMatch = status.match(/Разрешение: (\d+x\d+)/);
+                
+                if (fpsMatch) document.getElementById('cameraFPS').textContent = fpsMatch[1];
+                if (resMatch) document.getElementById('cameraResolution').textContent = resMatch[1];
+            }
+        });
+}
+
+setInterval(updateCameraStatus, 2000);
+updateCameraStatus();
+</script>
+{% endblock %}

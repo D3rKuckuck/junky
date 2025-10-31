@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1>Управление с телефона</h1>
+        
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Видео с камеры</h5>
+                <img id="cameraFeed" src="{{ url_for('video_feed') }}" class="img-fluid" alt="Camera Feed">
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Движение</h6>
+                        <div class="joystick-container">
+                            <div class="joystick-outer" id="leftJoystick">
+                                <div class="joystick-inner"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small>Y: <span id="leftValue">0</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Поворот</h6>
+                        <div class="joystick-container">
+                            <div class="joystick-outer" id="rightJoystick">
+                                <div class="joystick-inner"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small>X: <span id="rightValue">0</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <button id="releaseControl" class="btn btn-warning w-100">Освободить управление</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.joystick-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto;
+}
+
+.joystick-outer {
+    width: 100%;
+    height: 100%;
+    border: 2px solid #007bff;
+    border-radius: 50%;
+    position: relative;
+    touch-action: none;
+}
+
+.joystick-inner {
+    width: 40px;
+    height: 40px;
+    background-color: #007bff;
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: all 0.1s;
+}
+</style>
+
+<script>
+class Joystick {
+    constructor(container, callback) {
+        this.container = container;
+        this.callback = callback;
+        this.outer = container.querySelector('.joystick-outer');
+        this.inner = container.querySelector('.joystick-inner');
+        this.isActive = false;
+        this.radius = container.offsetWidth / 2;
+        
+        this.init();
+    }
+    
+    init() {
+        this.container.addEventListener('touchstart', this.handleStart.bind(this));
+        this.container.addEventListener('mousedown', this.handleStart.bind(this));
+        document.addEventListener('touchmove', this.handleMove.bind(this));
+        document.addEventListener('mousemove', this.handleMove.bind(this));
+        document.addEventListener('touchend', this.handleEnd.bind(this));
+        document.addEventListener('mouseup', this.handleEnd.bind(this));
+    }
+    
+    handleStart(e) {
+        e.preventDefault();
+        this.isActive = true;
+        this.updatePosition(e);
+    }
+    
+    handleMove(e) {
+        if (!this.isActive) return;
+        e.preventDefault();
+        this.updatePosition(e);
+    }
+    
+    handleEnd(e) {
+        if (!this.isActive) return;
+        e.preventDefault();
+        this.isActive = false;
+        this.resetPosition();
+    }
+    
+    updatePosition(e) {
+        const rect = this.outer.getBoundingClientRect();
+        const centerX = rect.left + this.radius;
+        const centerY = rect.top + this.radius;
+        
+        let clientX, clientY;
+        if (e.type.includes('touch')) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        
+        const deltaX = clientX - centerX;
+        const deltaY = clientY - centerY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        let limitedX = deltaX;
+        let limitedY = deltaY;
+        
+        if (distance > this.radius - 20) {
+            limitedX = (deltaX / distance) * (this.radius - 20);
+            limitedY = (deltaY / distance) * (this.radius - 20);
+        }
+        
+        this.inner.style.transform = `translate(${limitedX}px, ${limitedY}px)`;
+        
+        // Вычисление значений (-100 до 100)
+        const x = Math.round((limitedX / (this.radius - 20)) * 100);
+        const y = Math.round((limitedY / (this.radius - 20)) * 100);
+        
+        this.callback(x, y);
+    }
+    
+    resetPosition() {
+        this.inner.style.transform = 'translate(-50%, -50%)';
+        this.callback(0, 0);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    let leftY = 0;
+    let rightX = 0;
+    
+    const leftJoystick = new Joystick(
+        document.getElementById('leftJoystick'),
+        (x, y) => {
+            leftY = -y; // Инвертируем Y для интуитивного управления
+            document.getElementById('leftValue').textContent = leftY;
+            sendJoystickData();
+        }
+    );
+    
+    const rightJoystick = new Joystick(
+        document.getElementById('rightJoystick'),
+        (x, y) => {
+            rightX = x;
+            document.getElementById('rightValue').textContent = rightX;
+            sendJoystickData();
+        }
+    );
+    
+    function sendJoystickData() {
+        fetch('/api/joystick', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                left_y: leftY,
+                right_x: rightX
+            })
+        });
+    }
+    
+    document.getElementById('releaseControl').addEventListener('click', function() {
+        fetch('/api/release_control', {method: 'POST'})
+            .then(() => window.location.href = '/');
+    });
+});
+</script>
+{% endblock %}

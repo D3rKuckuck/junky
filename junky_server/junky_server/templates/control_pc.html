@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1>Управление с ПК</h1>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Видео с камеры</h5>
+                        <img id="cameraFeed" src="{{ url_for('video_feed') }}" class="img-fluid" alt="Camera Feed">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Управление</h5>
+                        
+                        <div class="text-center mb-3">
+                            <div class="control-grid">
+                                <button class="btn btn-outline-primary control-btn" data-key="w">W</button>
+                                <button class="btn btn-outline-primary control-btn" data-key="a">A</button>
+                                <button class="btn btn-outline-primary control-btn" data-key="s">S</button>
+                                <button class="btn btn-outline-primary control-btn" data-key="d">D</button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Скорость: <span id="speedValue">0</span></label>
+                            <div class="progress">
+                                <div id="speedBar" class="progress-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-change="-1">↓</button>
+                                <button class="btn btn-sm btn-outline-secondary speed-btn" data-change="1">↑</button>
+                            </div>
+                        </div>
+                        
+                        <button id="releaseControl" class="btn btn-warning w-100">Освободить управление</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    max-width: 150px;
+    margin: 0 auto;
+}
+
+.control-grid button:nth-child(1) { grid-column: 2; }
+.control-grid button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.control-grid button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.control-grid button:nth-child(4) { grid-column: 3; grid-row: 2; }
+
+.control-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const speedLevels = [0, 32, 64, 96, 128, 160, 192, 224, 255];
+    let currentSpeedIndex = 0;
+    
+    // Обработка кнопок управления
+    document.querySelectorAll('.control-btn').forEach(btn => {
+        btn.addEventListener('mousedown', () => handleKey(btn.dataset.key, 1));
+        btn.addEventListener('mouseup', () => handleKey(btn.dataset.key, 0));
+        btn.addEventListener('mouseleave', () => handleKey(btn.dataset.key, 0));
+    });
+    
+    // Обработка изменения скорости
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const change = parseInt(btn.dataset.change);
+            currentSpeedIndex = Math.max(0, Math.min(speedLevels.length - 1, currentSpeedIndex + change));
+            updateSpeedDisplay();
+            sendSpeed(speedLevels[currentSpeedIndex]);
+        });
+    });
+    
+    // Освобождение управления
+    document.getElementById('releaseControl').addEventListener('click', releaseControl);
+    
+    // Обработка клавиатуры
+    document.addEventListener('keydown', (e) => handleKeyboard(e, 1));
+    document.addEventListener('keyup', (e) => handleKeyboard(e, 0));
+    
+    function handleKey(key, state) {
+        fetch('/api/keypress', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key: key, state: state})
+        });
+        
+        // Визуальная обратная связь
+        const btn = document.querySelector(`[data-key="${key}"]`);
+        if (btn) {
+            btn.classList.toggle('active', state === 1);
+        }
+    }
+    
+    function handleKeyboard(e, state) {
+        const keyMap = {
+            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd',
+            'ArrowUp': 'up', 'ArrowDown': 'down'
+        };
+        
+        if (keyMap[e.code]) {
+            e.preventDefault();
+            handleKey(keyMap[e.code], state);
+            
+            // Изменение скорости
+            if (e.code === 'ArrowUp' && state === 1) {
+                currentSpeedIndex = Math.min(speedLevels.length - 1, currentSpeedIndex + 1);
+                updateSpeedDisplay();
+                sendSpeed(speedLevels[currentSpeedIndex]);
+            } else if (e.code === 'ArrowDown' && state === 1) {
+                currentSpeedIndex = Math.max(0, currentSpeedIndex - 1);
+                updateSpeedDisplay();
+                sendSpeed(speedLevels[currentSpeedIndex]);
+            }
+        }
+    }
+    
+    function sendSpeed(speed) {
+        fetch('/api/speed', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({speed_level: speed})
+        });
+    }
+    
+    function updateSpeedDisplay() {
+        const speedValue = document.getElementById('speedValue');
+        const speedBar = document.getElementById('speedBar');
+        const percentage = (currentSpeedIndex / (speedLevels.length - 1)) * 100;
+        
+        speedValue.textContent = speedLevels[currentSpeedIndex];
+        speedBar.style.width = `${percentage}%`;
+    }
+    
+    function releaseControl() {
+        fetch('/api/release_control', {method: 'POST'})
+            .then(() => window.location.href = '/');
+    }
+    
+    // Инициализация отображения скорости
+    updateSpeedDisplay();
+});
+</script>
+{% endblock %}
