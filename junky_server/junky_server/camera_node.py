@@ -6,22 +6,15 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 import time
 import threading
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
-class AdvancedCameraNode(Node):
+class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
         
         self.bridge = CvBridge()
         
-        # QoS настройки для видео (лучше подходят для потокового видео)
-        video_qos = QoSProfile(
-            depth=1,
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE
-        )
-        
-        self.camera_pub = self.create_publisher(Image, '/junky/camera/image', video_qos)
+        # Используем стандартный QoS для совместимости
+        self.camera_pub = self.create_publisher(Image, '/junky/camera/image', 10)
         self.status_pub = self.create_publisher(String, '/junky/camera_status', 10)
         
         self.cap = None
@@ -32,136 +25,93 @@ class AdvancedCameraNode(Node):
         # Статистика
         self.fps = 0
         self.last_stats_time = time.time()
-        self.processing_time = 0
-        
-        # Параметры
-        self.declare_parameter('camera_id', 0)
-        self.declare_parameter('width', 640)
-        self.declare_parameter('height', 480) 
-        self.declare_parameter('target_fps', 30)
-        self.declare_parameter('show_fps', False)
         
         self.initialize_camera()
         
-        # Основной цикл в отдельном потоке для максимальной производительности
+        # Основной цикл в отдельном потоке
         self.capture_thread = threading.Thread(target=self.capture_loop)
         self.capture_thread.daemon = True
         self.capture_thread.start()
         
-        self.get_logger().info('Advanced camera node started')
+        # Таймер для статуса
+        self.status_timer = self.create_timer(2.0, self.status_callback)
+        
+        self.get_logger().info('Camera node started')
 
     def initialize_camera(self):
         try:
-            camera_id = self.get_parameter('camera_id').value
-            width = self.get_parameter('width').value
-            height = self.get_parameter('height').value
-            target_fps = self.get_parameter('target_fps').value
-            
-            self.cap = cv2.VideoCapture(camera_id)
+            self.cap = cv2.VideoCapture(0)
             
             if not self.cap.isOpened():
-                self.get_logger().error(f'Failed to open camera {camera_id}')
-                # Попытка найти другую камеру
-                for i in range(3):
-                    self.cap = cv2.VideoCapture(i)
-                    if self.cap.isOpened():
-                        self.get_logger().info(f'Found camera at index {i}')
-                        break
-            
-            if not self.cap.isOpened():
-                self.get_logger().error('No cameras available')
+                self.get_logger().error('Cannot open camera')
                 return
-            
-            # Оптимальные настройки для минимальной задержки
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            self.cap.set(cv2.CAP_PROP_FPS, target_fps)
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Минимальный буфер
-            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+                
+            # Настройка параметров камеры
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
             # Проверяем реальные значения
-            actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
             
             self.get_logger().info(
-                f'Camera: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS'
+                f'Camera initialized: {actual_width}x{actual_height} at {actual_fps:.1f} FPS'
             )
             
         except Exception as e:
-            self.get_logger().error(f'Camera init error: {str(e)}')
+            self.get_logger().error(f'Camera initialization error: {str(e)}')
 
     def capture_loop(self):
-        last_frame_time = time.time()
-        target_frame_time = 1.0 / self.get_parameter('target_fps').value
-        
         while self.is_running and rclpy.ok():
             try:
-                # Регулировка FPS
-                current_time = time.time()
-                elapsed = current_time - last_frame_time
-                
-                if elapsed < target_frame_time:
-                    time.sleep(max(0, target_frame_time - elapsed - 0.001))
-                    continue
-                
-                if not self.cap or not self.cap.isOpened():
+                if self.cap is None or not self.cap.isOpened():
                     time.sleep(0.1)
                     continue
                 
-                # Захват кадра
+                # Чтение кадра
                 ret, frame = self.cap.read()
                 
                 if not ret:
-                    self.get_logger().warn('Frame capture failed')
-                    time.sleep(0.01)
+                    self.get_logger().warn('Failed to read frame from camera')
+                    time.sleep(0.1)
                     continue
                 
-                # Обработка и публикация
-                self.process_and_publish_frame(frame)
+                # Публикация кадра
+                self.publish_frame(frame)
                 
-                # Статистика
                 self.frame_count += 1
-                last_frame_time = current_time
                 
-                # Обновление FPS каждую секунду
+                # Расчет FPS
+                current_time = time.time()
                 if current_time - self.last_stats_time >= 1.0:
                     self.fps = self.frame_count / (current_time - self.last_stats_time)
                     self.frame_count = 0
                     self.last_stats_time = current_time
                     
             except Exception as e:
-                self.get_logger().error(f'Capture loop error: {str(e)}')
+                self.get_logger().error(f'Error in camera loop: {str(e)}')
                 time.sleep(0.1)
 
-    def process_and_publish_frame(self, frame):
-        start_time = time.time()
-        
+    def publish_frame(self, frame):
         try:
-            # Добавление FPS на кадр (опционально)
-            if self.get_parameter('show_fps').value:
-                cv2.putText(frame, f'FPS: {self.fps:.1f}', (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            
-            # Конвертация и публикация
             ros_image = self.bridge.cv2_to_imgmsg(frame, "bgr8")
             ros_image.header.stamp = self.get_clock().now().to_msg()
-            ros_image.header.frame_id = "camera"
-            
+            ros_image.header.frame_id = "camera_frame"
             self.camera_pub.publish(ros_image)
-            
         except Exception as e:
-            self.get_logger().error(f'Frame processing error: {str(e)}')
-        
-        self.processing_time = time.time() - start_time
+            self.get_logger().error(f'Error converting image: {str(e)}')
 
     def status_callback(self):
         status_msg = String()
         if self.cap and self.cap.isOpened():
+            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             status_msg.data = (
-                f"Активна | FPS: {self.fps:.1f} | "
-                f"Обработка: {self.processing_time*1000:.1f}ms | "
-                f"Режим: Непрерывный цикл"
+                f"Активна | Разрешение: {width}x{height} | "
+                f"FPS: {self.fps:.1f}"
             )
         else:
             status_msg.data = "Неактивна"
@@ -171,21 +121,16 @@ class AdvancedCameraNode(Node):
     def destroy_node(self):
         self.is_running = False
         if hasattr(self, 'capture_thread') and self.capture_thread.is_alive():
-            self.capture_thread.join(timeout=2.0)
+            self.capture_thread.join(timeout=1.0)
         
         if self.cap:
             self.cap.release()
-            cv2.destroyAllWindows()
         
-        self.get_logger().info('Camera node shutdown complete')
         super().destroy_node()
 
 def main():
     rclpy.init()
-    node = AdvancedCameraNode()
-    
-    # Таймер для статуса
-    status_timer = node.create_timer(2.0, node.status_callback)
+    node = CameraNode()
     
     try:
         rclpy.spin(node)

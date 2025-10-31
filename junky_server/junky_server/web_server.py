@@ -50,7 +50,7 @@ class WebServerNode(Node):
         self.camera_status_sub = self.create_subscription(
             String, '/junky/camera_status', self.camera_status_callback, 10)
         
-        # Подписчик для камеры
+        # Подписчик для камеры (стандартный QoS)
         self.camera_sub = self.create_subscription(
             Image, '/junky/camera/image', self.camera_callback, 10)
         
@@ -82,8 +82,8 @@ class WebServerNode(Node):
 
     def publish_joystick(self, left_y, right_x):
         msg = Twist()
-        msg.linear.x = float(left_y) / 100.0  # Нормализация к [-1, 1]
-        msg.angular.z = float(right_x) / 100.0  # Нормализация к [-1, 1]
+        msg.linear.x = float(left_y) / 100.0
+        msg.angular.z = float(right_x) / 100.0
         self.joy_pub.publish(msg)
 
     def publish_control_mode(self, mode):
@@ -98,12 +98,15 @@ def generate_frames():
     while True:
         with frame_lock:
             if latest_frame is not None:
-                # Конвертируем кадр в JPEG
-                ret, buffer = cv2.imencode('.jpg', latest_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                if ret:
-                    frame = buffer.tobytes()
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                try:
+                    # Конвертируем кадр в JPEG
+                    ret, buffer = cv2.imencode('.jpg', latest_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    if ret:
+                        frame = buffer.tobytes()
+                        yield (b'--frame\r\n'
+                               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                except Exception as e:
+                    print(f"Error encoding frame: {e}")
         time.sleep(0.033)  # ~30 FPS
 
 @app.route('/video_feed')
@@ -213,6 +216,85 @@ def get_camera_status():
     if web_node:
         return jsonify({'status': web_node.camera_status})
     return jsonify({'status': 'Web node not available'})
+
+# Статические файлы
+@app.route('/static/css/style.css')
+def static_css():
+    css = """
+    .control-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 5px;
+        max-width: 150px;
+        margin: 0 auto;
+    }
+    
+    .control-grid button:nth-child(1) { grid-column: 2; }
+    .control-grid button:nth-child(2) { grid-column: 1; grid-row: 2; }
+    .control-grid button:nth-child(3) { grid-column: 2; grid-row: 2; }
+    .control-grid button:nth-child(4) { grid-column: 3; grid-row: 2; }
+    
+    .control-btn.active {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .speed-controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3px;
+    }
+    
+    .speed-btn.active {
+        background-color: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
+    
+    .current-state {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .joystick-container {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        margin: 0 auto;
+    }
+    
+    .joystick-outer {
+        width: 100%;
+        height: 100%;
+        border: 2px solid #007bff;
+        border-radius: 50%;
+        position: relative;
+        touch-action: none;
+    }
+    
+    .joystick-inner {
+        width: 40px;
+        height: 40px;
+        background-color: #007bff;
+        border-radius: 50%;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        transition: all 0.1s;
+    }
+    """
+    return Response(css, mimetype='text/css')
+
+@app.route('/static/js/script.js')
+def static_js():
+    js = """
+    // Basic JavaScript functionality
+    console.log('Junky Robot JS loaded');
+    """
+    return Response(js, mimetype='application/javascript')
 
 def main():
     global web_node
