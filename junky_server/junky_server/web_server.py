@@ -4,8 +4,14 @@ from flask import Flask, render_template, Response, jsonify, request
 import threading
 import os
 import json
-from std_msgs.msg import String, Int32, Float32
+import time
+import cv2
+import base64
+from io import BytesIO
+from std_msgs.msg import String, Int32
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 # Получаем путь к пакету
 from ament_index_python.packages import get_package_share_directory
@@ -15,6 +21,11 @@ app = Flask(__name__)
 # Глобальные переменные для управления доступом
 current_controller = None  # 'pc', 'phone', или None
 controller_lock = threading.Lock()
+
+# Глобальные переменные для видео
+latest_frame = None
+frame_lock = threading.Lock()
+bridge = CvBridge()
 
 class WebServerNode(Node):
     def __init__(self):
@@ -39,11 +50,25 @@ class WebServerNode(Node):
         self.camera_status_sub = self.create_subscription(
             String, '/junky/camera_status', self.camera_status_callback, 10)
         
+        # Подписчик для камеры
+        self.camera_sub = self.create_subscription(
+            Image, '/junky/camera/image', self.camera_callback, 10)
+        
         self.camera_status = "Неактивна"
         self.get_logger().info('Web server node started')
 
     def camera_status_callback(self, msg):
         self.camera_status = msg.data
+
+    def camera_callback(self, msg):
+        global latest_frame
+        try:
+            # Конвертируем ROS Image в OpenCV
+            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+            with frame_lock:
+                latest_frame = cv_image
+        except Exception as e:
+            self.get_logger().error(f'Error processing camera image: {str(e)}')
 
     def publish_key(self, key, state):
         msg = String()
@@ -68,6 +93,23 @@ class WebServerNode(Node):
 
 # Глобальный экземпляр узла
 web_node = None
+
+def generate_frames():
+    while True:
+        with frame_lock:
+            if latest_frame is not None:
+                # Конвертируем кадр в JPEG
+                ret, buffer = cv2.imencode('.jpg', latest_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    frame = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        time.sleep(0.033)  # ~30 FPS
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/')
 def index():
