@@ -11,8 +11,6 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/server_launch.py']),
-        ('share/' + package_name + '/templates', ['junky_server/static/css/style.css']),
-        ('share/' + package_name + '/templates', ['junky_server/static/js/script.js']),
         ('share/' + package_name + '/templates', ['junky_server/templates/base.html']),
         ('share/' + package_name + '/templates', ['junky_server/templates/index.html']),
         ('share/' + package_name + '/templates', ['junky_server/templates/control_pc.html']),
