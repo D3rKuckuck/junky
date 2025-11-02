@@ -27,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
             'web_server = junky_server.web_server:main',
-            'control_node = junky_server.control_node:main',
             'camera_node = junky_server.camera_node:main',
         ],
     },
