@@ -11,12 +11,6 @@ def generate_launch_description():
         ),
         Node(
             package='junky_server',
-            executable='control_node',
-            name='control_node',
-            output='screen'
-        ),
-        Node(
-            package='junky_server',
             executable='camera_node',
             name='camera_node',
             output='screen'

@@ -3,7 +3,7 @@
 <package format="3">
   <name>junky_server</name>
   <version>0.0.0</version>
-  <description>Robot Junky control package</description>
+  <description>Robot Junky server package</description>
   <maintainer email="your@email.com">Your Name</maintainer>
   <license>Apache-2.0</license>
 

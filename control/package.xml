@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelayout="1.0"?>
 <package format="3">
-  <name>junky_server</name>
+  <name>control</name>
   <version>0.0.0</version>
   <description>Robot Junky control package</description>
   <maintainer email="your@email.com">Your Name</maintainer>

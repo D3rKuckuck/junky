@@ -100,11 +100,38 @@
     border-radius: 5px;
     border: 1px solid #dee2e6;
 }
+
+#speedHint {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-size: 14px;
+    z-index: 1000;
+    transition: opacity 0.3s;
+    opacity: 0;
+}
+
+.speed-btn.active {
+    background-color: #28a745;
+    color: white;
+    border-color: #28a745;
+    transform: scale(1.05);
+    transition: all 0.2s ease;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const speedLevels = [0, 32, 64, 96, 128, 160, 192, 224, 255];
+    let currentSpeedIndex = 0; // Текущий индекс в массиве скоростей
     let currentSpeed = 0;
     let activeKeys = new Set();
     
@@ -138,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.speed-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const speed = parseInt(btn.dataset.speed);
-            setSpeed(speed);
+            setSpeedByValue(speed);
         });
     });
     
@@ -148,23 +175,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // Обработка клавиатуры
     document.addEventListener('keydown', (e) => {
         const keyMap = {
-            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd'
+            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd',
+            'ArrowUp': 'arrow_up', 'ArrowDown': 'arrow_down'
         };
         
         if (keyMap[e.code] && !activeKeys.has(keyMap[e.code])) {
             e.preventDefault();
-            activeKeys.add(keyMap[e.code]);
-            handleKey(keyMap[e.code], 1);
-            updateDirectionState();
+            
+            if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                // Обработка стрелок для изменения скорости
+                handleSpeedChange(e.code);
+            } else {
+                // Обработка WASD для направления
+                activeKeys.add(keyMap[e.code]);
+                handleKey(keyMap[e.code], 1);
+                updateDirectionState();
+            }
         }
     });
     
     document.addEventListener('keyup', (e) => {
         const keyMap = {
-            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd'
+            'KeyW': 'w', 'KeyA': 'a', 'KeyS': 's', 'KeyD': 'd',
+            'ArrowUp': 'arrow_up', 'ArrowDown': 'arrow_down'
         };
         
-        if (keyMap[e.code]) {
+        if (keyMap[e.code] && (e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD')) {
             e.preventDefault();
             activeKeys.delete(keyMap[e.code]);
             handleKey(keyMap[e.code], 0);
@@ -172,22 +208,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    function handleKey(key, state) {
-        fetch('/api/keypress', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({key: key, state: state})
-        });
-        
-        // Визуальная обратная связь
-        const btn = document.querySelector(`[data-key="${key}"]`);
-        if (btn) {
-            btn.classList.toggle('active', state === 1);
+    function handleSpeedChange(key) {
+        if (key === 'ArrowUp') {
+            // Увеличиваем скорость
+            if (currentSpeedIndex < speedLevels.length - 1) {
+                currentSpeedIndex++;
+                setSpeedByIndex(currentSpeedIndex);
+            }
+        } else if (key === 'ArrowDown') {
+            // Уменьшаем скорость
+            if (currentSpeedIndex > 0) {
+                currentSpeedIndex--;
+                setSpeedByIndex(currentSpeedIndex);
+            }
         }
     }
     
-    function setSpeed(speed) {
+    function setSpeedByIndex(index) {
+        const speed = speedLevels[index];
+        setSpeedByValue(speed);
+        currentSpeedIndex = index;
+    }
+    
+    function setSpeedByValue(speed) {
         currentSpeed = speed;
+        currentSpeedIndex = speedLevels.indexOf(speed);
         updateSpeedDisplay();
         
         // Снимаем выделение со всех кнопок скорости
@@ -203,6 +248,20 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Отправляем скорость на сервер
         sendSpeed(speed);
+    }
+    
+    function handleKey(key, state) {
+        fetch('/api/keypress', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key: key, state: state})
+        });
+        
+        // Визуальная обратная связь
+        const btn = document.querySelector(`[data-key="${key}"]`);
+        if (btn) {
+            btn.classList.toggle('active', state === 1);
+        }
     }
     
     function sendSpeed(speed) {
@@ -224,6 +283,43 @@ document.addEventListener('DOMContentLoaded', function() {
         speedValue.textContent = currentSpeed;
         currentSpeedState.textContent = currentSpeed;
         speedBar.style.width = `${percentage}%`;
+        
+        // Показываем подсказку о текущем уровне скорости
+        showSpeedHint();
+    }
+    
+    function showSpeedHint() {
+        // Временно показываем подсказку о изменении скорости
+        const hint = document.getElementById('speedHint') || createSpeedHint();
+        const speedPercent = Math.round((currentSpeed / 255) * 100);
+        hint.textContent = `Скорость: ${speedPercent}%`;
+        hint.style.opacity = '1';
+        
+        // Скрываем подсказку через 1.5 секунды
+        clearTimeout(hint.timeout);
+        hint.timeout = setTimeout(() => {
+            hint.style.opacity = '0';
+        }, 1500);
+    }
+    
+    function createSpeedHint() {
+        const hint = document.createElement('div');
+        hint.id = 'speedHint';
+        hint.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            transition: opacity 0.3s;
+            opacity: 0;
+        `;
+        document.body.appendChild(hint);
+        return hint;
     }
     
     function updateDirectionState() {
@@ -255,7 +351,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Инициализация - устанавливаем скорость 0
-    setSpeed(0);
+    setSpeedByValue(0);
 });
 </script>
 {% endblock %}
