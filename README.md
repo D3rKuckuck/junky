@@ -6,6 +6,17 @@ sudo usermod -a -G rdma,docker,video $USER
 ```
 ## Structure of packages
 ```
+control/
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── resource/control
+├── launch/
+│   └── controls_launch.py
+├── control/
+│   ├── __init__.py
+│   └── manual_control_node.py
+└── test/
 junky_server/
 ├── package.xml
 ├── setup.py
@@ -16,13 +27,7 @@ junky_server/
 ├── junky_server/
 │   ├── __init__.py
 │   ├── web_server.py
-│   ├── control_node.py
 │   ├── camera_node.py
-│   ├── static/
-│   |   ├── css/
-│   |   │   └── style.css
-│   |   └── js/
-│   |       └── script.js
 │   └── templates/
 │       ├── base.html
 │       ├── index.html
