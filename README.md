@@ -4,7 +4,7 @@ For working with harware
 ```
 sudo usermod -a -G rdma,docker,video $USER
 ```
-## Structure of server package
+## Structure of packages
 ```
 junky_server/
 ├── package.xml
